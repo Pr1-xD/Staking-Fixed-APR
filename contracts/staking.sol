@@ -366,23 +366,3 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
     }
 }
 
-//remove pool id --
-//change reward calculation --
-//take apr and period in constructor --
-//queue for deposit and timestamp mapping --
-//test pausable 
-// check events to trigger
-//check reentrancy
-
-
-//for separate APR, mapping between timestamp end for an APR. Add only previous APRs and add current APR reward. Check this mapping for all reward claims --
-//the deposit/timestamp queue is also used for reward calculation --
-//keep record of claimed amounts to subtract from claimable --
-//add stakerewards function to add accumulated rewards to staked amount. Reduce from rewards, add as deposit
-//function to reset?
-
-
-//check if staking started before deposit
-//add APR timestamps
-//make APR zero on pause
-//add pausable
