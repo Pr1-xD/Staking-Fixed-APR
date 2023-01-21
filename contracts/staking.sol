@@ -18,14 +18,14 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    struct UserInfo {
-        uint256 balance;
-        uint256 lastClaimed; 
-        uint256 pendingRewards;
-        mapping(uint256 => uint256) depositAmount;       //index => amount
-        mapping(uint256 => uint256) depositTimestamp;       //index => timestamp
-        uint256 first;
-        uint256 last;
+    struct UserInfo {                                   //Stores All User Info
+        uint256 balance;                                //User Balance
+        uint256 lastClaimed;                            //Last Claim Timestamp 
+        uint256 pendingRewards;                         //Pending Rewards from withdrawn amount
+        mapping(uint256 => uint256) depositAmount;      //index => amount
+        mapping(uint256 => uint256) depositTimestamp;   //index => timestamp
+        uint256 first;                                  //first index for deposit timestamp queue
+        uint256 last;                                   //last index for deposit timestamp queue
     }
 
     uint256 poolBalance;
@@ -33,12 +33,12 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
     uint256 rewardsAmount;
     uint256 lockupDuration;
 
-    uint256 startBlock;
+    uint256 startBlock;                                 //Staking Start Timestamp
 
    
-    IERC20 public stakingToken;
-    address public feeRecipient;
-    uint256 public withdrawalFee;
+    IERC20 public stakingToken;                         // ERC20 Staking Token Address
+    address public feeRecipient;                        
+    uint256 public withdrawalFee;                       // Fee * 100 Example: 2% = 200
     uint256 public constant MAX_FEE = 10000;
     uint256 public constant MAX_REWARD_RATE = 10000;
     uint256 public minDepositAmount = 1;
@@ -48,8 +48,8 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
 
    mapping(address => UserInfo) public userInfo;
 
-   uint256[] public rewardRate;
-   uint256[] public rewardRateTimestamp;
+   uint256[] public rewardRate;                         //Array of APR values
+   uint256[] public rewardRateTimestamp;                //Array of APR change timestamps
 
     event Deposit(address user, uint256 amount);
     event Withdraw(address user, uint256 amount);
@@ -66,7 +66,7 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
         maxUserBalance=_maxUserBalance;
     }
     
-    function startStaking() external onlyOwner {   
+    function startStaking() external onlyOwner {    
     startBlock=block.timestamp;
     rewardRateTimestamp.push(startBlock);
     }
@@ -79,7 +79,7 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
         maxCap = _cap;
     }
 
-    function balance() public view returns (uint256) {
+    function balance() public view returns (uint256) {              //Total Pool Balance
         return poolBalance;
     }
 
@@ -119,12 +119,14 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
 
         while(depositTotal < amount){
 
-            if(user.depositAmount[index] > remainingAmount){
+            if(user.depositAmount[index] > remainingAmount){            
                 user.depositAmount[index]=user.depositAmount[index].sub(remainingAmount);
                 depositTotal = depositTotal.add(remainingAmount);
                 
                 uint256 rewardCalculationTime = 0;
                 uint256 rewardsAccumulated = 0;
+
+                //Calculate rewards for withdrawing amount
                 if(user.lastClaimed >= user.depositTimestamp[index]) rewardCalculationTime=user.lastClaimed;
                 if(user.lastClaimed < user.depositTimestamp[index]) rewardCalculationTime=user.depositTimestamp[index];
 
@@ -155,6 +157,7 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
                 remainingAmount=remainingAmount.sub(user.depositAmount[index]);   
                 depositTotal=depositTotal.add(user.depositAmount[index]);
 
+                //Calculate rewards for withdrawing amount
                 uint256 rewardCalculationTime = 0;
                 uint256 rewardsAccumulated = 0;
                 if(user.lastClaimed >= user.depositTimestamp[index]) rewardCalculationTime=user.lastClaimed;
@@ -235,7 +238,7 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
         emit Withdraw(msg.sender, amount);
     }
 
-    function withdrawAll() external {
+    function withdrawAll() external {           //Withdraw all deposited amount
         UserInfo storage user = userInfo[msg.sender];
         withdraw(user.balance);
     }
@@ -250,21 +253,21 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
         uint256 amountStaked = 0;
         uint256 totalReward = 0;
 
-        while(index <= user.last){
+        while(index <= user.last){              // Calculates accumulated rewards for deposited amount
             amountStaked = user.depositAmount[index];
             uint256 rewardCalculationTime = 0;
             uint256 rewardsAccumulated = 0;
 
-                if(user.lastClaimed >= user.depositTimestamp[index]) rewardCalculationTime=user.lastClaimed;
+                if(user.lastClaimed >= user.depositTimestamp[index]) rewardCalculationTime=user.lastClaimed;    //Calculate from last claimed or deposit time, depending on latest value
                 if(user.lastClaimed < user.depositTimestamp[index]) rewardCalculationTime=user.depositTimestamp[index];
 
                 for ( uint256 i = 0; i<rewardRateTimestamp.length-1; i++){
                     if(rewardCalculationTime >= rewardRateTimestamp[i] && rewardCalculationTime < rewardRateTimestamp[i+1]){
-                        secondsStaked =  rewardRateTimestamp[i+1] - rewardCalculationTime;
+                        secondsStaked =  rewardRateTimestamp[i+1] - rewardCalculationTime;                      
                         rewardsAccumulated = rewardsAccumulated + ((amountStaked * rewardRate[i] * secondsStaked) / (86400 * 365 * MAX_REWARD_RATE));
                     }
                     else if(rewardCalculationTime < rewardRateTimestamp[i] && rewardCalculationTime < rewardRateTimestamp[i+1]){
-                        secondsStaked =  rewardRateTimestamp[i+1] - rewardRateTimestamp[i];
+                        secondsStaked =  rewardRateTimestamp[i+1] - rewardRateTimestamp[i];                     
                         rewardsAccumulated = rewardsAccumulated + ((amountStaked * rewardRate[i] * secondsStaked) / (86400 * 365 * MAX_REWARD_RATE));
                     }
                 }
@@ -279,10 +282,10 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
             index = index + 1;
         }
 
-        return totalReward.add(user.pendingRewards);        // add pending rewards
+        return totalReward.add(user.pendingRewards);        
     }
 
-    function claim() public nonReentrant {    
+    function claim() public nonReentrant {                              //Claim Rewards
         UserInfo storage user = userInfo[msg.sender];
         uint256 reward = claimable(msg.sender);
         uint256 claimedAmount = safeTransferRewards(msg.sender, reward);
@@ -294,7 +297,7 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
 
 
 
-    function addDeposit(address _user,uint256 amount) internal {
+    function addDeposit(address _user,uint256 amount) internal {        //Add deposit and timestamp to queue
         UserInfo storage user = userInfo[_user];
 
         if(user.first == 0)   //initialize
@@ -344,10 +347,14 @@ contract StakingContract is Ownable, Pausable, ReentrancyGuard {
     }
 
     function pause() external onlyOwner {
+        rewardRate.push(0);                                 //Sets APR to 0
+        rewardRateTimestamp.push(block.timestamp);
         _pause();
     }
 
     function unpause() external onlyOwner {
+        rewardRate.push(rewardRate.length-2);               //Resets to previous APR
+        rewardRateTimestamp.push(block.timestamp);
         _unpause();
     }
 
